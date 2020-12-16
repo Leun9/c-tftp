@@ -1,0 +1,1 @@
+g++ client.cpp -lwsock32 -o tftp
