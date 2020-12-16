@@ -7,5 +7,5 @@
 
 #define LOGFILE         ".log"
 
-#define RRQ_OPcode      1
-#define WRQ_OPcode      2
+#define RRQ_OPCODE      1
+#define WRQ_OPCODE      2

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <io.h>
 #include <winsock2.h>
 #include <windows.h>
 
@@ -9,7 +10,7 @@ const char *source;
 const char *target;
 const char *local_filename;
 const char *remote_filename;
-const char *trans_mode;
+char trans_mode[9] = "octet";
 struct sockaddr_in server_addr;
 struct sockaddr* server_addr_ptr = (struct sockaddr*)&server_addr;
 int server_addr_len = sizeof(struct sockaddr_in);
@@ -23,13 +24,19 @@ int client_sockfd;
 
 FILE* logfile;
 
+// FIXME :
+// 1 add Timeout-Retransmission(4)
+// 2 吞吐量
+// 3 日志信息
+// 3 netascii : 当服务器仍然发送二进制文件时，由于FILE*打开模式为w，可能导致错误，解决方法参考RFC？
+
 void Help() {
-    printf("Usage: tftp <get|put> <server_ip> <source> <target> <transmode> [-v]\n");
+    printf("Usage: tftp <-r|-w|-rn|-wn> <server_ip> <source> [target]\n");
     exit(-1);
 }
 
 void ErrArg(char * info) {
-    printf("[ERROR] arg error: %s.", info);
+    printf("[ERROR] arg error: %s.\n", info);
     exit(-1);
 }
 
@@ -51,7 +58,7 @@ void ErrUnexpected() {
 }
 
 void ErrFile() {
-    printf("[ERROR] failed to open file.\n");
+    printf("[ERROR] failed to open file, file: %s, trans mode: %s.\n", local_filename, trans_mode);
     exit(-1);
 }
 
@@ -70,16 +77,15 @@ void SendRequest(short OPCode) {
 }
 
 int Get() { // bbuf used to send request and recv data, sbuf used to send ack 
-    // send read request
-    SendRequest(RRQ_OPcode);
+
+    // send read request and send request
+    SendRequest(RRQ_OPCODE);
     fprintf(logfile, "[INFO] Sent read request.\n");
-    
-    // open local file
     FILE *fp = fopen(local_filename, "wb");
     if (fp == NULL) ErrFile();
 
     // receive data
-    sbuf[0] = 0, sbuf[1] = 4; // ACK_OPCode
+    sbuf[0] = 0, sbuf[1] = 4; // ACK_OPCODE
     for (int expected_data_num = 1; ; ) {
         // recv data
         int ret = recvfrom(client_sockfd, bbuf, BBUFMAXLEN, 0, server_addr_ptr, &server_addr_len);
@@ -111,16 +117,15 @@ int Get() { // bbuf used to send request and recv data, sbuf used to send ack
 }
 
 int Put() { // bbuf used to send request and send data, sbuf used to recv ack
-    // open local file
+    
+    // open local file and send request
     FILE *fp = fopen(local_filename, "rb");
     if (fp == NULL) ErrFile();
-
-    // send write request
-    SendRequest(WRQ_OPcode);
+    SendRequest(WRQ_OPCODE);
     fprintf(logfile, "[INFO] Sent write request.\n");
 
     // recv ack and send data
-    bbuf[0] = 0, bbuf[1] = 3; // DATA_OPCode
+    bbuf[0] = 0, bbuf[1] = 3; // DATA_OPCODE
     bbuf_len = 516; // for ack0
     for (int expected_ack_num = 0; ; ) {
         // recv ack
@@ -153,19 +158,15 @@ int Put() { // bbuf used to send request and send data, sbuf used to recv ack
 }
 
 int main(int argc, char* argv[]) {
-    if (strcmp(argv[1], "-h") == 0) Help();
-    if (strcmp(argv[1], "--help") == 0) Help();
-
     // check args
-    if (argc != 6) ErrArg("the number of arguments should be 6");
-    const char *action = argv[1];
-    const char *addr = argv[2];
+    if (argc < 4 || argc > 5) Help();
+    char *action = argv[1];
+    char *addr = argv[2];
     source = argv[3];
-    target = argv[4];
-    trans_mode = argv[5];
-    if (strcmp(action, "get") && strcmp(action, "put")) ErrArg("action should be \"get\" or \"put\"");
+    target = (argc == 5) ? argv[4] : source;
+    if (!action[3] && action[2] == 'n') strcpy(trans_mode, "netascii"), action[2] = 0;
+    if (strcmp(action, "-r") && strcmp(action, "-w")) Help();
     if (INADDR_NONE == inet_addr(addr)) ErrArg("invalid ip address");
-    if (strcmp(trans_mode, "octet") && strcmp(trans_mode, "netascii")) ErrArg("transmode should be \"octet\" or \"netascii\"");
 
     // init
     WSADATA wsa_data;
@@ -173,7 +174,7 @@ int main(int argc, char* argv[]) {
 
 	// create client socket
 	client_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    printf("\nAction: %s\nAddr: %s\nSource: %s\nTarget: %s\nTransmode: %s\n\n", action, addr, source, target, trans_mode);
+    printf("\nAddr: %s\nSource: %s\nTarget: %s\nTransmode: %s\n\n", addr, source, target, trans_mode);
 
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_addr.s_addr = inet_addr(addr);
@@ -184,12 +185,12 @@ int main(int argc, char* argv[]) {
     setsockopt(client_sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&send_time_out, sizeof(int));
 
     logfile = fopen(LOGFILE, "w");
-    if (strcmp(action, "get") == 0) {
+    if (strcmp(action, "-r") == 0) {
         remote_filename = source;
         local_filename = target;
         return Get();
     }
-    if (strcmp(action, "put") == 0) {
+    if (strcmp(action, "-w") == 0) {
         remote_filename = target;
         local_filename = source;
         return Put();
