@@ -4,7 +4,7 @@
 #include <string.h>
 #include <io.h>
 #include <winsock2.h>
-#include <windows.h>
+#include <time.h>
 
 #include "netascii.h"
 
@@ -27,10 +27,6 @@ int client_sockfd;
 int err_type = 0;
 int err_code = 0;
 FILE* logfile;
-
-// FIXME :
-// 1 add Timeout-Retransmission(4) and update log
-// 2 tun tu liang
 
 void PrintError() {
     switch (err_type){
@@ -85,7 +81,7 @@ void Help() {
 }
 
 #define SEND_BUF_TO_SERVER(buf, buf_len) \
-    sendto(client_sockfd, buf, buf_len, 0, server_addr_ptr, sizeof(struct sockaddr))
+    (send_bytes += buf_len, sendto(client_sockfd, buf, buf_len, 0, server_addr_ptr, sizeof(struct sockaddr)))
 
 #define SendRequest(OPCode) {\
     *(short*)bbuf = htons(OPCode); \
@@ -98,11 +94,19 @@ void Help() {
     if (SOCKET_ERROR == SEND_BUF_TO_SERVER(bbuf, bbuf_len)) SET_ERROR_AND_RETURN(ERRTYPE_SOCK, WSAGetLastError()); \
 }
 
+double CalcSpeed(long long s, clock_t time) {
+    return (double)s * (CLOCKS_PER_SEC) / time;
+}
+
 int Get() { // bbuf used to send request and recv data, sbuf used to send ack 
+    clock_t clock_start = clock(); // clock
+    long long send_bytes = 0, recv_bytes = 0; // flow
+    int trans_cnt = 0;
 
     // open local file and send read request
     FILE *fp = fopen(local_tmpfile, "wb");
     if (fp == NULL) SET_ERROR_AND_RETURN(ERRTYPE_FILE, ERRCODE_TMPFILE);
+GetSendRequest:
     SendRequest(TFTP_OPCODE_RRQ);
     fprintf(logfile, "[INFO] Sent read request.\n");
 
@@ -112,10 +116,24 @@ int Get() { // bbuf used to send request and recv data, sbuf used to send ack
         // recv data
         int ret = recvfrom(client_sockfd, bbuf, BBUFMAXLEN, 0, server_addr_ptr, &server_addr_len);
         int data_num = ntohs(*(short*)(bbuf + 2));
-        fprintf(logfile, "[INFO] Received block %d , size: %d.\n", data_num, ret);
+        if (ret > 0) {
+            recv_bytes += ret;
+            fprintf(logfile, "[INFO] Received block %d , size: %d.\n", data_num, ret);
+        }
 
         // check packet
-        if (ret == SOCKET_ERROR ) SET_ERROR_AND_RETURN(ERRTYPE_SOCK, WSAGetLastError()); // recvfrom error
+        if (ret == SOCKET_ERROR ) { // recvfrom error
+            int serr_code = WSAGetLastError();
+            if (serr_code != WSAETIMEDOUT) SET_ERROR_AND_RETURN(ERRTYPE_SOCK, WSAGetLastError()); 
+            if (serr_code == WSAETIMEDOUT) { // Timeout-Retransmission
+                if (trans_cnt++ == 3) SET_ERROR_AND_RETURN(ERRTYPE_SOCK, WSAGetLastError());
+                fprintf(logfile, "[WARN] time-out, retransmission: %d/3.\n", trans_cnt);
+            }
+            if (expected_data_num == 1) goto GetSendRequest;
+            goto GetSend;
+        }
+        trans_cnt = 0;
+        
         if (bbuf[0] == 0 && bbuf[1] == 5) // tftp error
             SET_ERROR_AND_RETURN(ERRTYPE_TFTP, ntohs(*(short*)(bbuf + 2)));
         if (bbuf[0] != 0 && bbuf[1] != 3) SET_ERROR_AND_RETURN(ERRTYPE_UNEXPECTED, 0); // unexpected error
@@ -126,12 +144,15 @@ int Get() { // bbuf used to send request and recv data, sbuf used to send ack
             fwrite(bbuf + 4, 1, ret - 4, fp);
             *(short*)(sbuf + 2) = htons(expected_data_num - 1); // ACK_num
         }
-
+GetSend:
         // send ack
         if (SOCKET_ERROR == SEND_BUF_TO_SERVER(sbuf, 4)) SET_ERROR_AND_RETURN(ERRTYPE_SOCK, WSAGetLastError());
         fprintf(logfile, "[INFO] Sent ack %d.\n", expected_data_num - 1);
         if (data_num + 1 == expected_data_num && ret < 516) { // last packet
-            printf("Read successed, total size: %d.\n", ftell(fp)); 
+            clock_t time = clock() - clock_start;
+            printf("Read successed, total size: %d, time: %d ms.\n", ftell(fp), time); 
+            printf("Send bytes: %d, speed: %.4lf bps.\n", send_bytes, CalcSpeed(send_bytes, time));
+            printf("Recv bytes: %d, speed: %.4lf bps.\n", recv_bytes, CalcSpeed(recv_bytes, time));
             fclose(fp); // success
             break;
         }
@@ -141,10 +162,14 @@ int Get() { // bbuf used to send request and recv data, sbuf used to send ack
 }
 
 int Put() { // bbuf used to send request and send data, sbuf used to recv ack
+    clock_t clock_start = clock(); // clock
+    long long send_bytes = 0, recv_bytes = 0; // flow
+    int trans_cnt = 0;
     
     // open local file and send request
     FILE *fp = fopen(local_tmpfile, "rb");
     if (fp == NULL) SET_ERROR_AND_RETURN(ERRTYPE_FILE, ERRCODE_TMPFILE);
+PutSendRequest:
     SendRequest(TFTP_OPCODE_WRQ);
     fprintf(logfile, "[INFO] Sent write request.\n");
 
@@ -155,10 +180,24 @@ int Put() { // bbuf used to send request and send data, sbuf used to recv ack
         // recv ack
         int ret = recvfrom(client_sockfd, sbuf, SBUFMAXLEN, 0, server_addr_ptr, &server_addr_len);
         int ack_num = ntohs(*(short*)(sbuf + 2));
-        fprintf(logfile, "[INFO] Received ack %d.\n", ack_num, ret);
+        if (ret > 0) {
+            recv_bytes += ret;
+            fprintf(logfile, "[INFO] Received ack %d.\n", ack_num, ret);
+        }
 
         // check packet
-        if (ret == SOCKET_ERROR) SET_ERROR_AND_RETURN(ERRTYPE_SOCK, WSAGetLastError()); // recvfrom error
+        if (ret == SOCKET_ERROR) { // recvfrom error
+            int serr_code = WSAGetLastError();
+            if (serr_code != WSAETIMEDOUT) SET_ERROR_AND_RETURN(ERRTYPE_SOCK, WSAGetLastError());
+            if (serr_code == WSAETIMEDOUT) { // Timeout-Retransmission
+                if (trans_cnt++ == 3)  SET_ERROR_AND_RETURN(ERRTYPE_SOCK, WSAGetLastError());
+                fprintf(logfile, "[WARN] time-out, retransmission: %d/3.\n", trans_cnt);
+            } 
+            if (expected_ack_num == 0) goto PutSendRequest;
+            goto PutSend;
+        }
+        trans_cnt = 0;
+        
         if (sbuf[0] == 0 && sbuf[1] == 5) // tftp error
             SET_ERROR_AND_RETURN(ERRTYPE_TFTP, ntohs(*(short*)(sbuf + 2)));
         if (sbuf[0] != 0 || sbuf[1] != 4) SET_ERROR_AND_RETURN(ERRTYPE_UNEXPECTED, 0); // unexpected error
@@ -166,7 +205,10 @@ int Put() { // bbuf used to send request and send data, sbuf used to recv ack
         // check order
         if (ack_num == expected_ack_num) { // right order
             if (bbuf_len < 516) { // last packet
-                printf("Write successed, total size: %d.\n", ftell(fp)); 
+                clock_t time = clock() - clock_start;
+                printf("Write successed, total size: %d, time: %d ms.\n", ftell(fp), time); 
+                printf("Send bytes: %d, speed: %.2lf bps.\n", send_bytes, CalcSpeed(send_bytes, time));
+                printf("Recv bytes: %d, speed: %.2lf bps.\n", recv_bytes, CalcSpeed(recv_bytes, time));
                 fclose(fp); // success
                 break;
             }
@@ -174,7 +216,7 @@ int Put() { // bbuf used to send request and send data, sbuf used to recv ack
             bbuf_len = fread(bbuf + 4, 1, PUT_DATALEN, fp) + 4;
             *(short*)(bbuf + 2) = htons(expected_ack_num); // data_num
         }
-
+PutSend:
         // send data
         if (SOCKET_ERROR == SEND_BUF_TO_SERVER(bbuf, bbuf_len)) SET_ERROR_AND_RETURN(ERRTYPE_SOCK, WSAGetLastError());
         fprintf(logfile, "[INFO] Sent block %d, size: %d.\n", bbuf_len);
