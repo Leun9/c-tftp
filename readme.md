@@ -70,7 +70,7 @@ set server_ip=[server_ip]
 
 测试的指令及结果如下：
 
-| request | mode     | file format | command                         | result                                                       |
+| request | mode     | file_format | command                         | result                                                       |
 | ------- | -------- | ----------- | ------------------------------- | ------------------------------------------------------------ |
 | write   | octet    | bin         | tftp -w %server_ip% sample_bin  | successed                                                    |
 | read    | octet    | bin         | tftp -r %server_ip% sample_bin  | successed                                                    |
