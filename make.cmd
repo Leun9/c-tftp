@@ -1,1 +1,1 @@
-gcc client.c -lwsock32 -o tftp
+gcc client.c netascii.c -lwsock32 -o tftp
