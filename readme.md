@@ -76,6 +76,6 @@ set server_ip=[server_ip]
 | read    | octet    | bin         | tftp -r %server_ip% sample_bin  | successed                                                    |
 | write   | netascii | netascii    | tftp -wn %server_ip% sample_txt | successed                                                    |
 | read    | netascii | netascii    | tftp -rn %server_ip% sample_txt | successed                                                    |
-| write   | netascii | bin         | tftp -wn %server_ip% sample_bin | 客户端报错：文件格式错误。                                   |
+| write   | netascii | bin         | tftp -wn %server_ip% sample_bin | 客户端报错：文件格式无法转换为netascii。                                   |
 | read    | netascii | bin         | tftp -rn %server_ip% sample_bin | 服务器以二进制格式发送文件，客户端接收并警告：接收了非netascii格式的文件。 |
 
