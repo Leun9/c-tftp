@@ -47,8 +47,8 @@ void PrintError() {
     case ERRTYPE_NETASCII:
         printf("[ERROR] Netascii error. ");
         switch (err_code) {
-        case INVALIDCR:
-            printf("Invalid carriage return.\n");
+        case INVALID_CRorLF:
+            printf("Invalid CR or LF.\n");
             break;
         case INVALIDCHAR:
             printf("Invalid char in file.\n");
