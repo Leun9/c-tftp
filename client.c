@@ -105,9 +105,8 @@ int Get() { // bbuf used to send request and recv data, sbuf used to send ack
 
     int trans_cnt = 0;
     long long send_bytes = 0, recv_bytes = 0; // flow
-    clock_t clock_start;
+    clock_t clock_start = clock(); // clock start;
 GetSendRequest:
-    clock_start = clock(); // clock start
     SendRequest(TFTP_OPCODE_RRQ);
     fprintf(logfile, "[INFO] Sent read request.\n");
 
@@ -169,9 +168,8 @@ int Put() { // bbuf used to send request and send data, sbuf used to recv ack
 
     int trans_cnt = 0;
     long long send_bytes = 0, recv_bytes = 0; // flow
-    clock_t clock_start;
+    clock_t clock_start = clock(); // clock start;
 PutSendRequest:
-    clock_start = clock(); // clock start
     SendRequest(TFTP_OPCODE_WRQ);
     fprintf(logfile, "[INFO] Sent write request.\n");
 
