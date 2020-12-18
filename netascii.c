@@ -8,29 +8,27 @@ int CheckNetascii(const char *filename) {
     FILE* fp = fopen(filename, "rb");
     if (fp == NULL) return ERRFPCHECK;
     int ret = 0;
+    char ch = 0, lastch;
     for (; ; ) {
-        char ch = fgetc(fp);
-        if (ch == EOF) break;
-        if (ch == 0x13) { // cr
-            ch = fgetc(fp);
-            if (ch != 0x10 || ch !=0x00) ret = INVALIDCR; // invalid CR
-            fseek(fp, -1L, SEEK_CUR);
-            continue;
-        }
+        lastch = ch;
+        ch = fgetc(fp);
+        if (lastch == 0x0d && (ch != 0x0a && ch !=0x00)) ret = INVALID_CRorLF; // invalid CR
+        if (ch == 0x0a && lastch != 0x0d) ret = INVALID_CRorLF; // invalid LF
         if (ch >= 0x20 && ch <= 0x7e) continue;
-        if (ch >= 0x07 && ch <= 0x12) continue;
+        if (ch >= 0x07 && ch <= 0x0d) continue;
         if (ch == 0) continue;
-        // printf("Invalid char 0x%02x.\n", (int)ch & 0xff);
+        if (ch == EOF) break;
         fclose(fp);
         return INVALIDCHAR; // invalid char
     }
     fclose(fp);
+    if (ch == 0x0d) return INVALID_CRorLF; // invalid CR : last byte
     return ret;
 }
 
 int Txt2Netascii(const char *filename, const char *tmpfile) {
     int ret = CheckNetascii(filename);
-    if (ret != 0 && ret != INVALIDCR) return ret;
+    if (ret != 0 && ret != INVALID_CRorLF) return ret;
     FILE* fpr = fopen(filename, "rb");
     if (fpr == NULL) return ERRFPR;
     FILE* fpw = fopen(tmpfile, "wb");
@@ -38,15 +36,14 @@ int Txt2Netascii(const char *filename, const char *tmpfile) {
         fclose(fpr);
         return ERRFPW;
     }
-    for (; ;) {
-        char ch = fgetc(fpr);
+    char ch = 0, lastch;
+    for (; ; ) {
+        lastch = ch;
+        ch = fgetc(fpr);
+        if (lastch == 0x0d && (ch != 0x0a && ch !=0x00)) fputc(0x00, fpw); // invalid CR
+        if (ch == 0x0a && lastch != 0x0d) fputc(0x0d, fpw); // invalid LF
         if (ch == EOF) break;
-        fputc(ch, fpw);
-        if (ch == 0x13) { // cr
-            ch = fgetc(fpr);
-            if (ch != 0x00 && ch != 0x10) fputc(0x10, fpw);
-            fseek(fpr, -1L, SEEK_CUR);
-        }
+        fputc(ch, fpw); 
     }
     printf("File raw size: %d, netascii size: %d.\n", ftell(fpr), ftell(fpw));
     fclose(fpr);
