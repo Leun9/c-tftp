@@ -22,7 +22,6 @@ int CheckNetascii(const char *filename) {
         return INVALIDCHAR; // invalid char
     }
     fclose(fp);
-    if (ch == 0x0d) return INVALID_CRorLF; // invalid CR : last byte
     return ret;
 }
 
