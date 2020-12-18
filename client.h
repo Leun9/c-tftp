@@ -1,8 +1,8 @@
 /* user args */
-
-#define BBUFMAXLEN              516         
-#define PUT_DATALEN             512         
-#define SBUFMAXLEN              4  
+        
+#define PUT_DATALEN             512     // The length of data sent at a time. Ensure server support if > 512.
+#define BBUFMAXLEN              516     // BBUFMAXLEN >= PUT_DATALEN + 4
+#define SBUFMAXLEN              4       // SBUFMAXLEN >= 4
 
 #define RECVTIMEOUT_DEFAULT     1000
 #define SENDTIMEOUT_DEFAULT     1000

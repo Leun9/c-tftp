@@ -99,14 +99,15 @@ double CalcSpeed(long long s, clock_t time) {
 }
 
 int Get() { // bbuf used to send request and recv data, sbuf used to send ack 
-    clock_t clock_start = clock(); // clock
-    long long send_bytes = 0, recv_bytes = 0; // flow
-    int trans_cnt = 0;
-
     // open local file and send read request
     FILE *fp = fopen(local_tmpfile, "wb");
     if (fp == NULL) SET_ERROR_AND_RETURN(ERRTYPE_FILE, ERRCODE_TMPFILE);
+
+    int trans_cnt = 0;
+    long long send_bytes = 0, recv_bytes = 0; // flow
+    clock_t clock_start;
 GetSendRequest:
+    clock_start = clock(); // clock start
     SendRequest(TFTP_OPCODE_RRQ);
     fprintf(logfile, "[INFO] Sent read request.\n");
 
@@ -151,7 +152,7 @@ GetSend:
         if (data_num + 1 == expected_data_num && ret < 516) { // last packet
             clock_t time = clock() - clock_start;
             printf("Read successed, total size: %d, time: %d ms.\n", ftell(fp), time); 
-            printf("Send bytes: %d, speed: %.4lf bps.\n", send_bytes, CalcSpeed(send_bytes, time));
+            printf("Sent bytes: %d, speed: %.4lf bps.\n", send_bytes, CalcSpeed(send_bytes, time));
             printf("Recv bytes: %d, speed: %.4lf bps.\n", recv_bytes, CalcSpeed(recv_bytes, time));
             fclose(fp); // success
             break;
@@ -162,14 +163,15 @@ GetSend:
 }
 
 int Put() { // bbuf used to send request and send data, sbuf used to recv ack
-    clock_t clock_start = clock(); // clock
-    long long send_bytes = 0, recv_bytes = 0; // flow
-    int trans_cnt = 0;
-    
     // open local file and send request
     FILE *fp = fopen(local_tmpfile, "rb");
     if (fp == NULL) SET_ERROR_AND_RETURN(ERRTYPE_FILE, ERRCODE_TMPFILE);
+
+    int trans_cnt = 0;
+    long long send_bytes = 0, recv_bytes = 0; // flow
+    clock_t clock_start;
 PutSendRequest:
+    clock_start = clock(); // clock start
     SendRequest(TFTP_OPCODE_WRQ);
     fprintf(logfile, "[INFO] Sent write request.\n");
 
@@ -207,7 +209,7 @@ PutSendRequest:
             if (bbuf_len < 516) { // last packet
                 clock_t time = clock() - clock_start;
                 printf("Write successed, total size: %d, time: %d ms.\n", ftell(fp), time); 
-                printf("Send bytes: %d, speed: %.2lf bps.\n", send_bytes, CalcSpeed(send_bytes, time));
+                printf("Sent bytes: %d, speed: %.2lf bps.\n", send_bytes, CalcSpeed(send_bytes, time));
                 printf("Recv bytes: %d, speed: %.2lf bps.\n", recv_bytes, CalcSpeed(recv_bytes, time));
                 fclose(fp); // success
                 break;
@@ -219,7 +221,7 @@ PutSendRequest:
 PutSend:
         // send data
         if (SOCKET_ERROR == SEND_BUF_TO_SERVER(bbuf, bbuf_len)) SET_ERROR_AND_RETURN(ERRTYPE_SOCK, WSAGetLastError());
-        fprintf(logfile, "[INFO] Sent block %d, size: %d.\n", bbuf_len);
+        fprintf(logfile, "[INFO] Sent block %d, size: %d.\n", expected_ack_num, bbuf_len);
     }
     fclose(fp);
     return 0;
