@@ -77,7 +77,7 @@ tftp <-r|-w|-rn|-wn> <server_ip> <source> [target]
   - 对于单独的LF（其前一字符不为CR），在其前插入CR。
   - 对于单独的CR（其后一字符不为LF或NUL）在其后插入NUL。
 
-## 启动服务器测试
+## 测试
 
 ### 启动服务器
 
