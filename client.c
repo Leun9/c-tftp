@@ -115,6 +115,7 @@ GetSendRequest:
     for (int expected_data_num = 1; ; ) {
         // recv data
         int ret = recvfrom(client_sockfd, bbuf, BBUFMAXLEN, 0, server_addr_ptr, &server_addr_len);
+        // TODO : check server ip and port
         int data_num = ntohs(*(short*)(bbuf + 2));
         if (ret > 0) {
             recv_bytes += ret;
@@ -179,6 +180,7 @@ PutSendRequest:
     for (int expected_ack_num = 0; ; ) {
         // recv ack
         int ret = recvfrom(client_sockfd, sbuf, SBUFMAXLEN, 0, server_addr_ptr, &server_addr_len);
+        // TODO : check server ip and port
         int ack_num = ntohs(*(short*)(sbuf + 2));
         if (ret > 0) {
             recv_bytes += ret;
