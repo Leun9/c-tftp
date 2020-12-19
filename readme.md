@@ -63,7 +63,7 @@ tftp <-r|-w|-rn|-wn> <server_ip> <source> [target]
 
 - 参考[RFC854](https://www.ietf.org/rfc/rfc854.txt)，netascii格式要求如下：
   - 合法的字符包括：
-    - ASCII码在0x20到0x7f之间的可打印字符
+    - ASCII码在0x20到0x7e之间的可打印字符
     - ASCII码在0x07到0x0d之的七个控制字符
     - 控制字符NUL(0x0)
   - 换行符必须为CRLF。
