@@ -34,6 +34,8 @@ long long recv_bytes = 0;
 long long send_bytes = 0;
 int recv_time_out = RECVTIMEOUT_DEFAULT;
 int send_time_out = SENDTIMEOUT_DEFAULT;
+int max_timeout_retrans_cnt = RETRANSCNT_DEFAULT;
+int retrans_cnt_sum = 0;
 clock_t clk_sta, clk_end;
 
 int err_type = 0;
@@ -138,7 +140,7 @@ int SetupSession(short request, short respond0, short respond1) {
     if (sendbuf_len == SENDBUFMAXLEN)
         SET_ERROR_AND_RETURN(ERRTYPE_CLIENT, ERRCODE_SENDBUFLEN);
 
-    for (int trans_cnt = 0; ; ) {
+    for (int timeout_retrans_cnt = 0; ; ) {
         // send read request
         if (SOCKET_ERROR == Send())
             SET_ERROR_AND_RETURN(ERRTYPE_SOCK, WSAGetLastError());
@@ -150,14 +152,18 @@ int SetupSession(short request, short respond0, short respond1) {
         // Time-out Retransmisson
         if (ret == SOCKET_ERROR) {
             if (WSAGetLastError() == WSAETIMEDOUT) {
-                trans_cnt++;
-                if (trans_cnt == RETRANSCNT_DEFAULT) SET_ERROR_AND_RETURN(ERRTYPE_CLIENT, ERRCODE_TIMEOUT0);
-                fprintf(logfile, "[WARN] Time-out, retransmission: %d/3.\n", trans_cnt);
+                timeout_retrans_cnt++;
+                retrans_cnt_sum++;
+                if (timeout_retrans_cnt == max_timeout_retrans_cnt) SET_ERROR_AND_RETURN(ERRTYPE_CLIENT, ERRCODE_TIMEOUT0);
+                fprintf(logfile, "[WARN] Time-out, retransmission times: %d.\n", timeout_retrans_cnt);
                 continue;
             } else {
                 SET_ERROR_AND_RETURN(ERRTYPE_SOCK, WSAGetLastError());
             }
         }
+        // update max_timeout_retrans_cnt
+        if (max_timeout_retrans_cnt < timeout_retrans_cnt * 2)
+            max_timeout_retrans_cnt = timeout_retrans_cnt * 2;
         // check packet
         if (ntohs(*(short*)recvbuf) == TFTP_OPCODE_ERR) 
             SET_ERROR_AND_RETURN(ERRTYPE_TFTP, ntohs(*(short*)(recvbuf + 2)));
@@ -173,7 +179,7 @@ int SetupSession(short request, short respond0, short respond1) {
 }
 
 int RoundTrip(short respond) {
-    for (int trans_cnt = 0; ; ) {
+    for (int timeout_retrans_cnt = 0; ; ) {
         // send packet
         if (SOCKET_ERROR == Send())
             SET_ERROR_AND_RETURN(ERRTYPE_SOCK, WSAGetLastError());
@@ -186,14 +192,18 @@ int RoundTrip(short respond) {
         // Time-out Retransmisson
         if (ret == SOCKET_ERROR) {
             if (WSAGetLastError() == WSAETIMEDOUT) {
-                trans_cnt++;
-                if (trans_cnt == RETRANSCNT_DEFAULT) SET_ERROR_AND_RETURN(ERRTYPE_CLIENT, ERRCODE_TIMEOUT);
-                fprintf(logfile, "[WARN] Time out, retransmission: %d/3.\n", trans_cnt);
+                timeout_retrans_cnt++;
+                retrans_cnt_sum++;
+                if (timeout_retrans_cnt == max_timeout_retrans_cnt) SET_ERROR_AND_RETURN(ERRTYPE_CLIENT, ERRCODE_TIMEOUT);
+                fprintf(logfile, "[WARN] Time out, retransmission times: %d.\n", timeout_retrans_cnt);
                 continue;
             } else {
                 SET_ERROR_AND_RETURN(ERRTYPE_SOCK, WSAGetLastError());
             }
         }
+        // update max_timeout_retrans_cnt
+        if (max_timeout_retrans_cnt < timeout_retrans_cnt * 2)
+            max_timeout_retrans_cnt = timeout_retrans_cnt * 2;
         // check packet
         if (ntohs(*(short*)recvbuf) == TFTP_OPCODE_ERR) 
             SET_ERROR_AND_RETURN(ERRTYPE_TFTP, ntohs(*(short*)(recvbuf + 2)));
@@ -214,11 +224,16 @@ int Get() {
     *(short*)sendbuf = htons(TFTP_OPCODE_ACK); // ack_opcode(00 04)
     *(short*)(sendbuf+2) = htons(1); // ack_num(00 01)
     sendbuf_len = 4;
-    for (short ackn = 1; recvbuf_len >= 516; ) {
+    short ackn = 1;
+    for (; recvbuf_len >= 516; ) {
         if (RoundTrip(htons(TFTP_OPCODE_DATA))) return -1;
         // check order
         short datan = ntohs(*(short*)(recvbuf + 2));
-        if (datan != ackn + 1) continue;
+        if (datan != ackn + 1) {
+            fprintf(logfile, "[WARN] Out of order.\n");
+            retrans_cnt_sum++;
+            continue;
+        }
         // write and update num
         fwrite(recvbuf + 4, 1, recvbuf_len - 4, local_fp);
         ackn++;
@@ -228,6 +243,7 @@ int Get() {
     Send();
     long time = clock() - clk_sta;
     printf("Read successed, total size: %ld, time: %ld ms.\n", ftell(local_fp), time); 
+    printf("Max data num: %hd, Retrans count: %d.\n", ackn, retrans_cnt_sum);
     printf("Sent bytes: %lld, speed: %.4lf bps.\n", send_bytes, CalcSpeed(send_bytes, time));
     printf("Recv bytes: %lld, speed: %.4lf bps.\n", recv_bytes, CalcSpeed(recv_bytes, time));
     fprintf(logfile, "[INFO] File downloaded successfully, size: %ld.\n", ftell(local_fp));
@@ -241,11 +257,16 @@ int Put() {
     sendbuf_len = fread(sendbuf + 4, 1, 512, local_fp) + 4;
     *(short*)sendbuf =  htons(TFTP_OPCODE_DATA); // data_opcode(00 03) 
     *(short*)(sendbuf + 2) = htons(1); // data_num(00 01)
-    for (short datan = 1;;) {
+    short datan = 1;
+    for (;;) {
         if (RoundTrip(htons(TFTP_OPCODE_ACK))) return -1;
         // check order
         short ackn = ntohs(*(short*)(recvbuf + 2));
-        if (ackn != datan) continue;
+        if (ackn != datan)  {
+            fprintf(logfile, "[WARN] Out of order.\n");
+            retrans_cnt_sum++;
+            continue;
+        }
         // read and update num
         sendbuf_len = fread(sendbuf + 4, 1, 512, local_fp) + 4;
         datan++;
@@ -254,6 +275,7 @@ int Put() {
     }
     long time = clock() - clk_sta;
     printf("Write successed, total size: %ld, time: %ld ms.\n", ftell(local_fp), time); 
+    printf("Max data num: %hd, Retrans count: %d.\n", datan - 1, retrans_cnt_sum);
     printf("Sent bytes: %lld, speed: %.4lf bps.\n", send_bytes, CalcSpeed(send_bytes, time));
     printf("Recv bytes: %lld, speed: %.4lf bps.\n", recv_bytes, CalcSpeed(recv_bytes, time));
     fprintf(logfile, "[INFO] File uploaded successfully, size: %d.\n", ftell(local_fp));

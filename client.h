@@ -5,7 +5,7 @@
 
 #define RECVTIMEOUT_DEFAULT     1000
 #define SENDTIMEOUT_DEFAULT     1000
-#define RETRANSCNT_DEFAULT      3
+#define RETRANSCNT_DEFAULT      5
 
 #define LOGFILE                 "tftp.log"
 
