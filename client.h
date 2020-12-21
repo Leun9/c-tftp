@@ -7,6 +7,8 @@
 #define SENDTIMEOUT_DEFAULT     1000
 #define RETRANSCNT_DEFAULT      5
 
+#define SPEED_REFRESH_FRE       1000
+
 #define LOGFILE                 "tftp.log"
 
 /* client error args */

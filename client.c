@@ -27,15 +27,19 @@ int recv_addr_len = sizeof(struct sockaddr_in);
 // client arg
 int client_sockfd;
 char recvbuf[RECVBUFMAXLEN]; // send buf
-char sendbuf[SENDBUFMAXLEN]; // recv buf
 int recvbuf_len;
+char sendbuf[SENDBUFMAXLEN]; // recv buf
 int sendbuf_len;
-long long recv_bytes = 0;
-long long send_bytes = 0;
+
+long recv_bytes = 0;
+long send_bytes = 0;
 int recv_time_out = RECVTIMEOUT_DEFAULT;
 int send_time_out = SENDTIMEOUT_DEFAULT;
 int max_timeout_retrans_cnt = RETRANSCNT_DEFAULT;
 int retrans_cnt_sum = 0;
+
+long rt_recv_bytes = 0;
+long rt_send_bytes = 0;
 clock_t clk_sta, clk_end;
 
 int err_type = 0;
@@ -105,13 +109,33 @@ void Help() {
     return -1; \
 }
 
+double CalcSpeed(long s, long time) {
+    return (double)s * (CLOCKS_PER_SEC) / time;
+}
+
+void PrtSpeed() {
+    clock_t now = clock();
+    long time = now - clk_end;
+    if (time < SPEED_REFRESH_FRE) return;
+
+    // calc real-time speed and print
+    printf("send speed: %-9.0lf bps, Recv speed: %-9.0lf bps.\r",
+            CalcSpeed(rt_send_bytes, time), CalcSpeed(rt_recv_bytes, time));
+
+    // update
+    clk_end = now;
+    rt_recv_bytes = 0;
+    rt_send_bytes = 0;
+}
+
 int Send() {
     int ret = sendto(client_sockfd, sendbuf, sendbuf_len, 0, server_addr_ptr, sizeof(struct sockaddr));
     if (ret > 0) {
         send_bytes += ret;
-        fprintf(logfile, "[INFO] Sent data, head: 0x%08lx, size: %d.\n",
-            ntohl(*(long*)sendbuf), ret);
+        rt_send_bytes += ret;
+        fprintf(logfile, "[INFO] Sent data, head: 0x%08lx, size: %d.\n", ntohl(*(long*)sendbuf), ret);
     }
+    PrtSpeed();
     return ret;
 }
 
@@ -119,17 +143,18 @@ int Recv() {
     recvbuf_len = recvfrom(client_sockfd, recvbuf, RECVBUFMAXLEN, 0, recv_addr_ptr, &recv_addr_len);
     if (recvbuf_len > 0) {
         recv_bytes += recvbuf_len;
-        fprintf(logfile, "[INFO] Received data, head: 0x%08lx, size: %d.\n",
-            ntohl(*(long*)recvbuf), recvbuf_len);
+        rt_recv_bytes += recvbuf_len;
+        fprintf(logfile, "[INFO] Received data, head: 0x%08lx, size: %d.\n", ntohl(*(long*)recvbuf), recvbuf_len);
     }
+    PrtSpeed();
     return recvbuf_len;
 }
 
-int SetupSession(short request, short respond0, short respond1) {
+int SetupSession(u_short request, u_short respond0, u_short respond1) {
     fprintf(logfile, "[INFO] Start setuping Session.\n");
     clk_sta = clock();
     // request packet : request_code + filename + trans_mode
-    *(short*)sendbuf = request;
+    *(u_short*)sendbuf = request;
 	sendbuf_len = 2;
     for (int i = 0; remote_filename[i] && sendbuf_len < SENDBUFMAXLEN; i++)
         sendbuf[sendbuf_len++] = remote_filename[i];
@@ -165,20 +190,20 @@ int SetupSession(short request, short respond0, short respond1) {
         if (max_timeout_retrans_cnt < timeout_retrans_cnt * 2)
             max_timeout_retrans_cnt = timeout_retrans_cnt * 2;
         // check packet
-        if (ntohs(*(short*)recvbuf) == TFTP_OPCODE_ERR) 
-            SET_ERROR_AND_RETURN(ERRTYPE_TFTP, ntohs(*(short*)(recvbuf + 2)));
+        if (ntohs(*(u_short*)recvbuf) == TFTP_OPCODE_ERR) 
+            SET_ERROR_AND_RETURN(ERRTYPE_TFTP, ntohs(*(u_short*)(recvbuf + 2)));
         // update port
-        if (*(short*)recvbuf == respond0 && *(short*)(recvbuf+2) == respond1) {
+        if (*(u_short*)recvbuf == respond0 && *(u_short*)(recvbuf+2) == respond1) {
             server_addr.sin_port = recv_addr.sin_port;
             break;
         }
         SET_ERROR_AND_RETURN(ERRTYPE_UNEXPECTED, 0);
     }
     return 0;
-    fprintf(logfile, "[INFO] Session successfully setuped, start transmiting. \n");
+    fprintf(logfile, "[INFO] Session setuped successfully, start transmiting. \n");
 }
 
-int RoundTrip(short respond) {
+int RoundTrip(u_short respond) {
     for (int timeout_retrans_cnt = 0; ; ) {
         // send packet
         if (SOCKET_ERROR == Send())
@@ -205,15 +230,11 @@ int RoundTrip(short respond) {
         if (max_timeout_retrans_cnt < timeout_retrans_cnt * 2)
             max_timeout_retrans_cnt = timeout_retrans_cnt * 2;
         // check packet
-        if (ntohs(*(short*)recvbuf) == TFTP_OPCODE_ERR) 
-            SET_ERROR_AND_RETURN(ERRTYPE_TFTP, ntohs(*(short*)(recvbuf + 2)));
-        if (*(short*)recvbuf == respond) break;
+        if (ntohs(*(u_short*)recvbuf) == TFTP_OPCODE_ERR) 
+            SET_ERROR_AND_RETURN(ERRTYPE_TFTP, ntohs(*(u_short*)(recvbuf + 2)));
+        if (*(u_short*)recvbuf == respond) break;
     }
     return 0;
-}
-
-double CalcSpeed(long long s, long time) {
-    return (double)s * (CLOCKS_PER_SEC) / time;
 }
 
 int Get() {
@@ -221,14 +242,14 @@ int Get() {
         return -1;
     // write and update num
     fwrite(recvbuf + 4, 1, recvbuf_len - 4, local_fp);
-    *(short*)sendbuf = htons(TFTP_OPCODE_ACK); // ack_opcode(00 04)
-    *(short*)(sendbuf+2) = htons(1); // ack_num(00 01)
+    *(u_short*)sendbuf = htons(TFTP_OPCODE_ACK); // ack_opcode(00 04)
+    *(u_short*)(sendbuf+2) = htons(1); // ack_num(00 01)
     sendbuf_len = 4;
-    short ackn = 1;
+    u_short ackn = 1;
     for (; recvbuf_len >= 516; ) {
         if (RoundTrip(htons(TFTP_OPCODE_DATA))) return -1;
         // check order
-        short datan = ntohs(*(short*)(recvbuf + 2));
+        u_short datan = ntohs(*(u_short*)(recvbuf + 2));
         if (datan != ackn + 1) {
             fprintf(logfile, "[WARN] Out of order.\n");
             retrans_cnt_sum++;
@@ -237,15 +258,16 @@ int Get() {
         // write and update num
         fwrite(recvbuf + 4, 1, recvbuf_len - 4, local_fp);
         ackn++;
-        *(short*)(sendbuf + 2) = htons(ackn);
+        *(u_short*)(sendbuf + 2) = htons(ackn);
     }
     // send ack
     Send();
     long time = clock() - clk_sta;
-    printf("Read successed, total size: %ld, time: %ld ms.\n", ftell(local_fp), time); 
+    printf("Read succeed, total size: %ld, time: %ld ms, speed: %.0lf bps.\n\n",
+            ftell(local_fp), time, CalcSpeed(ftell(local_fp), time)); 
     printf("Max data num: %hd, Retrans count: %d.\n", ackn, retrans_cnt_sum);
-    printf("Sent bytes: %lld, speed: %.4lf bps.\n", send_bytes, CalcSpeed(send_bytes, time));
-    printf("Recv bytes: %lld, speed: %.4lf bps.\n", recv_bytes, CalcSpeed(recv_bytes, time));
+    printf("Send bytes: %-10lld, speed: %-9.0lf bps.\n", send_bytes, CalcSpeed(send_bytes, time));
+    printf("Recv bytes: %-10lld, speed: %-9.0lf bps.\n", recv_bytes, CalcSpeed(recv_bytes, time));
     fprintf(logfile, "[INFO] File downloaded successfully, size: %ld.\n", ftell(local_fp));
     return 0;
 }
@@ -255,13 +277,13 @@ int Put() {
         return -1;
     // read and update num
     sendbuf_len = fread(sendbuf + 4, 1, 512, local_fp) + 4;
-    *(short*)sendbuf =  htons(TFTP_OPCODE_DATA); // data_opcode(00 03) 
-    *(short*)(sendbuf + 2) = htons(1); // data_num(00 01)
-    short datan = 1;
+    *(u_short*)sendbuf =  htons(TFTP_OPCODE_DATA); // data_opcode(00 03) 
+    *(u_short*)(sendbuf + 2) = htons(1); // data_num(00 01)
+    u_short datan = 1;
     for (;;) {
         if (RoundTrip(htons(TFTP_OPCODE_ACK))) return -1;
         // check order
-        short ackn = ntohs(*(short*)(recvbuf + 2));
+        u_short ackn = ntohs(*(u_short*)(recvbuf + 2));
         if (ackn != datan)  {
             fprintf(logfile, "[WARN] Out of order.\n");
             retrans_cnt_sum++;
@@ -270,14 +292,15 @@ int Put() {
         // read and update num
         sendbuf_len = fread(sendbuf + 4, 1, 512, local_fp) + 4;
         datan++;
-        *(short*)(sendbuf + 2) = htons(datan);
+        *(u_short*)(sendbuf + 2) = htons(datan);
         if (sendbuf_len == 4) break;  // recv last ack
     }
     long time = clock() - clk_sta;
-    printf("Write successed, total size: %ld, time: %ld ms.\n", ftell(local_fp), time); 
+    printf("Write succeed, total size: %ld, time: %ld ms, speed: %.0lf bps.\n\n",
+            ftell(local_fp), time, CalcSpeed(ftell(local_fp), time)); 
     printf("Max data num: %hd, Retrans count: %d.\n", datan - 1, retrans_cnt_sum);
-    printf("Sent bytes: %lld, speed: %.4lf bps.\n", send_bytes, CalcSpeed(send_bytes, time));
-    printf("Recv bytes: %lld, speed: %.4lf bps.\n", recv_bytes, CalcSpeed(recv_bytes, time));
+    printf("Send bytes: %-10lld, speed: %-9.0lf bps.\n", send_bytes, CalcSpeed(send_bytes, time));
+    printf("Recv bytes: %-10lld, speed: %-9.0lf bps.\n", recv_bytes, CalcSpeed(recv_bytes, time));
     fprintf(logfile, "[INFO] File uploaded successfully, size: %d.\n", ftell(local_fp));
     return 0;
 }
