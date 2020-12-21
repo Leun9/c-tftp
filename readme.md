@@ -18,6 +18,7 @@ C语言实现的TFTP Windows客户端。
 
 - 提供对octet格式和netascii格式（[RFC854](https://www.ietf.org/rfc/rfc854.txt)）的读写支持（netascii.c）
 - 超时重传机制（具体可见client.c的Timeout-Retransmission）
+- 实时发送/接收速度显示
 
 ## 使用方式
 
