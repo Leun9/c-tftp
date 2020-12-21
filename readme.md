@@ -7,11 +7,11 @@ C语言实现的TFTP客户端。
 * [项目介绍](#项目介绍)
 * [使用方式](#使用方式)
 * [实现思路](#实现思路)
-  * [读（下载文件）](#读（下载文件）)
-  * [写（上传文件）](#写（上传文件）)
+  * [下载文件](#下载文件)
+  * [上传文件](#上传文件)
   * [netascii](#netascii)
 * [测试](#测试)
-  * [启动服务器](#启动服务器)
+  * [编译](#编译)
   * [客户端测试](#客户端测试)
 
 ## 项目介绍
@@ -42,7 +42,7 @@ tftp <-r|-w|-rn|-wn> <server_ip> <source> [target]
 
 ## 实现思路
 
-#### 读（下载文件）
+#### 下载文件
 
 1. 发送读请求后，接收数据包并将数据按序写入缓存文件中。
 
@@ -51,7 +51,7 @@ tftp <-r|-w|-rn|-wn> <server_ip> <source> [target]
 3. 若传输成功，将缓存文件重命名为指定文件（可能覆盖同名文件）。
 4. 若传输出错，删除缓存文件。
 
-#### 写（上传文件）
+#### 上传文件
 
 对于octet，直接打开原始文件上传数据；对于netascii，工作流程如下：
 
@@ -79,42 +79,53 @@ tftp <-r|-w|-rn|-wn> <server_ip> <source> [target]
 
 ## 测试
 
-### 启动服务器
+### 编译
 
-首先在Linux环境下启动tftp服务器。
+在windows环境下编译客户端，并设置服务器ip。
 
-```bash
-pip3 install tftpy
-mkdir tftp_dir # 用作tftp服务器的文件目录
-python3 tftp_server.py
-```
-
-其中tftp_server.py如下：
-
-```python
-import tftpy
-
-server = tftpy.TftpServer('./tftp_dir')
-server.listen('0.0.0.0', 69)
+```cmd
+make
+set server_ip=server_ip
 ```
 
 ### 客户端测试
 
-在windows环境下编译客户端并测试。
+与正常的服务器通信，测试客户端，指令及结果如下：
 
-```cmd
-make
-set server_ip=[server_ip]
+| request | mode     | file_format | command                         | result                                             |
+| ------- | -------- | ----------- | ------------------------------- | -------------------------------------------------- |
+| write   | octet    | bin         | tftp -w %server_ip% sample_bin  | successed                                          |
+| read    | octet    | bin         | tftp -r %server_ip% sample_bin  | successed                                          |
+| write   | netascii | netascii    | tftp -wn %server_ip% sample_txt | successed                                          |
+| read    | netascii | netascii    | tftp -rn %server_ip% sample_txt | successed                                          |
+| write   | netascii | bin         | tftp -wn %server_ip% sample_bin | 客户端报错：文件格式无法转换为netascii。           |
+| read    | netascii | bin         | tftp -rn %server_ip% sample_bin | 接收并检查是否为netascii格式。<br>不是则警告用户。 |
+
+设置高丢包率的环境，测试客户端。
+
+```
+TODO
 ```
 
-测试的指令及结果如下：
+```
+TODO
+```
 
-| request | mode     | file_format | command                         | result                                                       |
-| ------- | -------- | ----------- | ------------------------------- | ------------------------------------------------------------ |
-| write   | octet    | bin         | tftp -w %server_ip% sample_bin  | successed                                                    |
-| read    | octet    | bin         | tftp -r %server_ip% sample_bin  | successed                                                    |
-| write   | netascii | netascii    | tftp -wn %server_ip% sample_txt | successed                                                    |
-| read    | netascii | netascii    | tftp -rn %server_ip% sample_txt | successed                                                    |
-| write   | netascii | bin         | tftp -wn %server_ip% sample_bin | 客户端报错：文件格式无法转换为netascii。                                   |
-| read    | netascii | bin         | tftp -rn %server_ip% sample_bin | 服务器以二进制格式发送文件，客户端接收并警告：接收了非netascii格式的文件。 |
+```
+TODO
+```
+
+设置延迟波动较大的环境，测试客户端。
+
+```
+TODO
+```
+
+```
+TODO
+```
+
+```
+TODO
+```
 
