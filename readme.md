@@ -39,8 +39,6 @@ Options:
 The target is the same as source if it is not assigned.
 ```
 
-其中-r和-w表示读请求和写请求，-n表示传输模式为netascii；若不指定target，则target与source相同。
-
 ## 实现思路
 
 #### 下载文件
@@ -109,10 +107,10 @@ Source: client.c
 Target: client.c
 Transmode: octet
 
-Write successed, total size: 13655, time: 6222 ms.
-Max data num: 28, Retrans count: 9.
-Sent bytes: 18424, speed: 2961.1058 bps.
-Recv bytes: 124, speed: 19.9293 bps.
+Write successed, total size: 13659, time: 18158 ms.
+Max data num: 27, Retrans count: 18.
+Sent bytes: 21575, speed: 1188.1815 bps.
+Recv bytes: 112, speed: 6.1681 bps.
 ```
 
 其中“Max data num: 28”表示总共有28个数据包，"Retrans count: 9"表示因失序或超时导致重传了9次。
