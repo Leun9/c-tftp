@@ -44,7 +44,6 @@ void PrintError() {
     switch (err_type) {
     case ERRTYPE_CLIENT:
         printf("[ERROR] Client error: ");
-        printf("%d", err_code);
         switch (err_code) {
         case ERRCODE_TIMEOUT0:
             printf("Session setup timeout.\n");
@@ -88,7 +87,13 @@ void PrintError() {
 }
 
 void Help() {
-    printf("Usage: tftp <-r|-w|-rn|-wn> <server_ip> <source> [target]\n");
+    printf("\nUsage: tftp [option] server_ip source [target]\n"
+            "Options:\n"
+            "  -w\tUpload binary file.\n"
+            "  -r\tDownload binary file.\n"
+            "  -wn\tUpload netascii file.\n"
+            "  -rn\tDownload netascii file.\n"
+            "The target is the same as source if it is not assigned.\n\n");
     exit(-1);
 }
 
@@ -102,7 +107,8 @@ int Send() {
     int ret = sendto(client_sockfd, sendbuf, sendbuf_len, 0, server_addr_ptr, sizeof(struct sockaddr));
     if (ret > 0) {
         send_bytes += ret;
-        fprintf(logfile, "[INFO] Sent data, head: 0x%08lx, size: %d.\n", *(long*)sendbuf, ret);
+        fprintf(logfile, "[INFO] Sent data, head: 0x%08lx, size: %d.\n",
+            ntohl(*(long*)sendbuf), ret);
     }
     return ret;
 }
@@ -111,12 +117,13 @@ int Recv() {
     recvbuf_len = recvfrom(client_sockfd, recvbuf, RECVBUFMAXLEN, 0, recv_addr_ptr, &recv_addr_len);
     if (recvbuf_len > 0) {
         recv_bytes += recvbuf_len;
-        fprintf(logfile, "[INFO] Received data, head: 0x%08lx, size: %d.\n", *(long*)recvbuf, recvbuf_len);
+        fprintf(logfile, "[INFO] Received data, head: 0x%08lx, size: %d.\n",
+            ntohl(*(long*)recvbuf), recvbuf_len);
     }
     return recvbuf_len;
 }
 
-int SetupSession(short request, long respond) {
+int SetupSession(short request, short respond0, short respond1) {
     fprintf(logfile, "[INFO] Start setuping Session.\n");
     clk_sta = clock();
     // request packet : request_code + filename + trans_mode
@@ -144,7 +151,7 @@ int SetupSession(short request, long respond) {
         if (ret == SOCKET_ERROR) {
             if (WSAGetLastError() == WSAETIMEDOUT) {
                 trans_cnt++;
-                if (trans_cnt == 3) SET_ERROR_AND_RETURN(ERRTYPE_CLIENT, ERRCODE_TIMEOUT0);
+                if (trans_cnt == RETRANSCNT_DEFAULT) SET_ERROR_AND_RETURN(ERRTYPE_CLIENT, ERRCODE_TIMEOUT0);
                 fprintf(logfile, "[WARN] Time-out, retransmission: %d/3.\n", trans_cnt);
                 continue;
             } else {
@@ -152,10 +159,10 @@ int SetupSession(short request, long respond) {
             }
         }
         // check packet
-        if (*(short*)recvbuf == TFTP_OPCODEN_ERR) 
+        if (ntohs(*(short*)recvbuf) == TFTP_OPCODE_ERR) 
             SET_ERROR_AND_RETURN(ERRTYPE_TFTP, ntohs(*(short*)(recvbuf + 2)));
         // update port
-        if (*(long*)recvbuf == respond) {
+        if (*(short*)recvbuf == respond0 && *(short*)(recvbuf+2) == respond1) {
             server_addr.sin_port = recv_addr.sin_port;
             break;
         }
@@ -180,7 +187,7 @@ int RoundTrip(short respond) {
         if (ret == SOCKET_ERROR) {
             if (WSAGetLastError() == WSAETIMEDOUT) {
                 trans_cnt++;
-                if (trans_cnt == 3) SET_ERROR_AND_RETURN(ERRTYPE_CLIENT, ERRCODE_TIMEOUT);
+                if (trans_cnt == RETRANSCNT_DEFAULT) SET_ERROR_AND_RETURN(ERRTYPE_CLIENT, ERRCODE_TIMEOUT);
                 fprintf(logfile, "[WARN] Time out, retransmission: %d/3.\n", trans_cnt);
                 continue;
             } else {
@@ -188,7 +195,7 @@ int RoundTrip(short respond) {
             }
         }
         // check packet
-        if (*(short*)recvbuf == TFTP_OPCODEN_ERR) 
+        if (ntohs(*(short*)recvbuf) == TFTP_OPCODE_ERR) 
             SET_ERROR_AND_RETURN(ERRTYPE_TFTP, ntohs(*(short*)(recvbuf + 2)));
         if (*(short*)recvbuf == respond) break;
     }
@@ -200,14 +207,15 @@ double CalcSpeed(long long s, long time) {
 }
 
 int Get() {
-    if (SetupSession(TFTP_OPCODEN_RRQ, 0x01000300L)) // data_opcode(00 03) data_num(00 01)
+    if (SetupSession(htons(TFTP_OPCODE_RRQ), htons(TFTP_OPCODE_DATA), htons(1))) // data_opcode(00 03) data_num(00 01)
         return -1;
     // write and update num
     fwrite(recvbuf + 4, 1, recvbuf_len - 4, local_fp);
-    *(long*)sendbuf = 0x01000400L; // ack_opcode(00 04) ack_num(00 01)
+    *(short*)sendbuf = htons(TFTP_OPCODE_ACK); // ack_opcode(00 04)
+    *(short*)(sendbuf+2) = htons(1); // ack_num(00 01)
     sendbuf_len = 4;
     for (short ackn = 1; recvbuf_len >= 516; ) {
-        if (RoundTrip(TFTP_OPCODEN_DATA)) return -1;
+        if (RoundTrip(htons(TFTP_OPCODE_DATA))) return -1;
         // check order
         short datan = ntohs(*(short*)(recvbuf + 2));
         if (datan != ackn + 1) continue;
@@ -227,13 +235,14 @@ int Get() {
 }
 
 int Put() {
-    if (SetupSession(TFTP_OPCODEN_WRQ, 0x00000400L)) // ack_opcode(00 04) ack_num(00 00)
+    if (SetupSession(htons(TFTP_OPCODE_WRQ), htons(TFTP_OPCODE_ACK), htons(0))) // ack_opcode(00 04) ack_num(00 00)
         return -1;
     // read and update num
     sendbuf_len = fread(sendbuf + 4, 1, 512, local_fp) + 4;
-    *(long*)sendbuf = 0x01000300L; // data_opcode(00 03) data_num(00 01)
+    *(short*)sendbuf =  htons(TFTP_OPCODE_DATA); // data_opcode(00 03) 
+    *(short*)(sendbuf + 2) = htons(1); // data_num(00 01)
     for (short datan = 1;;) {
-        if (RoundTrip(TFTP_OPCODEN_ACK)) return -1;
+        if (RoundTrip(htons(TFTP_OPCODE_ACK))) return -1;
         // check order
         short ackn = ntohs(*(short*)(recvbuf + 2));
         if (ackn != datan) continue;

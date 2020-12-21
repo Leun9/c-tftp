@@ -5,6 +5,7 @@
 
 #define RECVTIMEOUT_DEFAULT     1000
 #define SENDTIMEOUT_DEFAULT     1000
+#define RETRANSCNT_DEFAULT      3
 
 #define LOGFILE                 "tftp.log"
 
@@ -26,8 +27,8 @@
 
 /* TFTP args */
 
-#define TFTP_OPCODEN_RRQ        0x0100
-#define TFTP_OPCODEN_WRQ        0x0200
-#define TFTP_OPCODEN_DATA       0x0300
-#define TFTP_OPCODEN_ACK        0x0400
-#define TFTP_OPCODEN_ERR        0x0500
+#define TFTP_OPCODE_RRQ         1
+#define TFTP_OPCODE_WRQ         2
+#define TFTP_OPCODE_DATA        3
+#define TFTP_OPCODE_ACK         4
+#define TFTP_OPCODE_ERR         5
