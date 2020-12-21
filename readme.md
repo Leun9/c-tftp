@@ -1,6 +1,6 @@
 # TFTP
 
-C语言实现的TFTP客户端。
+C语言实现的TFTP Windows客户端。
 
 ## 目录
 
@@ -11,18 +11,13 @@ C语言实现的TFTP客户端。
   * [上传文件](#上传文件)
   * [netascii](#netascii)
 * [测试](#测试)
-  * [编译](#编译)
-  * [客户端测试](#客户端测试)
 
 ## 项目介绍
 
 实现了[RFC1350](https://www.ietf.org/rfc/rfc1350.txt)描述的TFTP客户端：
 
 - 提供对octet格式和netascii格式（[RFC854](https://www.ietf.org/rfc/rfc854.txt)）的读写支持（netascii.c）
-- 超时重传机制（具体可见client.c的Timeout-Retransmission注释处）
-- 客户端参数可调（client.h）
-- 接收、发送、超时重传记录日志
-- 详细的报错信息
+- 超时重传机制（具体可见client.c的Timeout-Retransmission）
 
 ## 使用方式
 
@@ -35,7 +30,13 @@ make
 命令行格式如下：
 
 ```cmd
-tftp <-r|-w|-rn|-wn> <server_ip> <source> [target]
+Usage: tftp [option] server_ip source [target]
+Options:
+  -w    Upload binary file.
+  -r    Download binary file.
+  -wn   Upload netascii file.
+  -rn   Download netascii file.
+The target is the same as source if it is not assigned.
 ```
 
 其中-r和-w表示读请求和写请求，-n表示传输模式为netascii；若不指定target，则target与source相同。
@@ -79,17 +80,6 @@ tftp <-r|-w|-rn|-wn> <server_ip> <source> [target]
 
 ## 测试
 
-### 编译
-
-在windows环境下编译客户端，并设置服务器ip。
-
-```cmd
-make
-set server_ip=server_ip
-```
-
-### 客户端测试
-
 与正常的服务器通信，测试客户端，指令及结果如下：
 
 | request | mode     | file_format | command                         | result                                             |
@@ -103,29 +93,33 @@ set server_ip=server_ip
 
 设置高丢包率的环境，测试客户端。
 
-```
-TODO
+首先在服务器上（Linux环境）将 wlp3s0 网卡设置30%的丢包率。
+
+```bash
+tc qdisc add dev wlp3s0 root netem loss 30%
 ```
 
-```
-TODO
-```
+在客户端上进行写操作，其结果如下。
 
 ```
-TODO
+>tftp -w %server_ip% client.c
+
+Addr: xx.xx.xx.xx
+Source: client.c
+Target: client.c
+Transmode: octet
+
+Write successed, total size: 13655, time: 6222 ms.
+Max data num: 28, Retrans count: 9.
+Sent bytes: 18424, speed: 2961.1058 bps.
+Recv bytes: 124, speed: 19.9293 bps.
 ```
 
-设置延迟波动较大的环境，测试客户端。
+其中“Max data num: 28”表示总共有28个数据包，"Retrans count: 9"表示因失序或超时导致重传了9次。
 
-```
-TODO
-```
+撤销服务器的更改。
 
-```
-TODO
-```
-
-```
-TODO
+```bash
+tc qdisc del dev wlp3s0 root netem loss 30%
 ```
 
