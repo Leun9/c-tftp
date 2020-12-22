@@ -52,13 +52,13 @@ void PrintError() {
         printf("[ERROR] Client error: ");
         switch (err_code) {
         case ERRCODE_TIMEOUT0:
-            printf("Session setup timeout.\n");
+            printf("Session setup failed: Timeout. \n");
             break;
         case ERRCODE_SENDBUFLEN:
             printf("SENDBUFLEN is too small.\n");
             break;
         case ERRCODE_TIMEOUT:
-            printf("Timeout.\n");
+            printf("Transmission interrupted: Timeout.\n");
             break;
         case ERRCODE_TMPFILE:
             printf("Cannot open file: %s.\n", local_filename);
@@ -87,7 +87,7 @@ void PrintError() {
         }
         break;
     default:
-        printf("[ERROR] Unexpected error.\n");
+        printf("[ERROR] An unexpected error has occurred. errtype: %d, errcode: %d.\n", err_type, err_code);
         break;
     }
 }
