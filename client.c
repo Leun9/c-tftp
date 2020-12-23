@@ -37,10 +37,13 @@ int recv_time_out = RECVTIMEOUT_DEFAULT;
 int send_time_out = SENDTIMEOUT_DEFAULT;
 int max_timeout_retrans_cnt = RETRANSCNT_DEFAULT;
 int retrans_cnt_sum = 0;
+int smooth_recv_time = RECVTIMEOUT_DEFAULT << 3; // used to calc recv_time_out
+int recv_time_dev = RECVTIMEOUT_DEFAULT << 1; // used to calc recv_time_out
 
 long rt_recv_bytes = 0;
 long rt_send_bytes = 0;
-clock_t clk_sta, clk_end;
+clock_t clk_sta;
+clock_t clk_prt_speed; // used to control refresh rate of real-time speed
 
 int err_type = 0;
 int err_code = 0;
@@ -115,15 +118,15 @@ double CalcSpeed(long s, long time) {
 
 void PrtSpeed() {
     clock_t now = clock();
-    long time = now - clk_end;
+    long time = now - clk_prt_speed;
     if (time < SPEED_REFRESH_FRE) return;
 
     // calc real-time speed and print
-    printf("send speed: %-9.0lf bps, Recv speed: %-9.0lf bps.\r",
+    printf("send speed: %-9.0lf bps  Recv speed: %-9.0lf bps.\r",
             CalcSpeed(rt_send_bytes, time), CalcSpeed(rt_recv_bytes, time));
 
     // update
-    clk_end = now;
+    clk_prt_speed = now;
     rt_recv_bytes = 0;
     rt_send_bytes = 0;
 }
@@ -140,8 +143,28 @@ int Send() {
 }
 
 int Recv() {
+    clock_t sta = clock();
     recvbuf_len = recvfrom(client_sockfd, recvbuf, RECVBUFMAXLEN, 0, recv_addr_ptr, &recv_addr_len);
+
     if (recvbuf_len > 0) {
+        // update smooth_recv_time and recv_time_out
+        //     imitate the update rules of RTO(Retransmission Timeout) in TCP protocol (linux/net/rxrpc/rtt.c)
+        int m = clock() - sta;
+        m -= (smooth_recv_time >> 3);
+        smooth_recv_time += m;      /* rtt = 7/8 rtt + 1/8 new */
+        if (m < 0) {
+            m = -m;
+            m -= (recv_time_dev >> 2);
+            if (m > 0) m >>= 3;     /* prevents growth of rto, limits too fast rto decreases */
+        } else {
+            m -= (recv_time_dev >> 2);
+        }
+        recv_time_dev += m;         /* mdev = 3/4 mdev + 1/4 new */
+
+        // update the timeout for blocking receive calls
+        recv_time_out = (smooth_recv_time >> 3) + recv_time_dev;
+        setsockopt(client_sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&recv_time_out, sizeof(int));
+
         recv_bytes += recvbuf_len;
         rt_recv_bytes += recvbuf_len;
         fprintf(logfile, "[INFO] Received data, head: 0x%08lx, size: %d.\n", ntohl(*(long*)recvbuf), recvbuf_len);
@@ -266,8 +289,8 @@ int Get() {
     printf("Read succeed, total size: %ld, time: %ld ms, speed: %.0lf bps.\n\n",
             ftell(local_fp), time, CalcSpeed(ftell(local_fp), time)); 
     printf("Max data num: %hd, Retrans count: %d.\n", ackn, retrans_cnt_sum);
-    printf("Send bytes: %-10lld, speed: %-9.0lf bps.\n", send_bytes, CalcSpeed(send_bytes, time));
-    printf("Recv bytes: %-10lld, speed: %-9.0lf bps.\n", recv_bytes, CalcSpeed(recv_bytes, time));
+    printf("Send bytes: %-10lld  speed: %-9.0lf bps.\n", send_bytes, CalcSpeed(send_bytes, time));
+    printf("Recv bytes: %-10lld  speed: %-9.0lf bps.\n", recv_bytes, CalcSpeed(recv_bytes, time));
     fprintf(logfile, "[INFO] File downloaded successfully, size: %ld.\n", ftell(local_fp));
     return 0;
 }
@@ -299,8 +322,8 @@ int Put() {
     printf("Write succeed, total size: %ld, time: %ld ms, speed: %.0lf bps.\n\n",
             ftell(local_fp), time, CalcSpeed(ftell(local_fp), time)); 
     printf("Max data num: %hd, Retrans count: %d.\n", datan - 1, retrans_cnt_sum);
-    printf("Send bytes: %-10lld, speed: %-9.0lf bps.\n", send_bytes, CalcSpeed(send_bytes, time));
-    printf("Recv bytes: %-10lld, speed: %-9.0lf bps.\n", recv_bytes, CalcSpeed(recv_bytes, time));
+    printf("Send bytes: %-10lld  speed: %-9.0lf bps.\n", send_bytes, CalcSpeed(send_bytes, time));
+    printf("Recv bytes: %-10lld  speed: %-9.0lf bps.\n", recv_bytes, CalcSpeed(recv_bytes, time));
     fprintf(logfile, "[INFO] File uploaded successfully, size: %d.\n", ftell(local_fp));
     return 0;
 }
@@ -343,7 +366,6 @@ int main(int argc, char* argv[]) {
 	server_addr.sin_port = htons(69);
 
     // set time limit
-    // FIXME : time limit is static
     setsockopt(client_sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&recv_time_out, sizeof(int));
     setsockopt(client_sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&send_time_out, sizeof(int));
 
