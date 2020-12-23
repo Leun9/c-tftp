@@ -36,7 +36,8 @@ long send_bytes = 0;
 int recv_time_out = RECVTIMEOUT_DEFAULT;
 int send_time_out = SENDTIMEOUT_DEFAULT;
 int max_timeout_retrans_cnt = RETRANSCNT_DEFAULT;
-int retrans_cnt_sum = 0;
+int to_retrans_cnt = 0;
+int ooo_retrans_cnt = 0; // out of order
 int smooth_recv_time = RECVTIMEOUT_DEFAULT << 3; // used to calc recv_time_out
 int recv_time_dev = RECVTIMEOUT_DEFAULT << 1; // used to calc recv_time_out
 
@@ -69,10 +70,10 @@ void PrintError() {
         }
         break;
     case ERRTYPE_TFTP:
-        printf("[ERROR] TFTP error. Error code: %d.\nThe text description of the error can be found at https://tools.ietf.org/html/rfc1350\n", err_code);
+        printf("[ERROR] TFTP error. Error code: %d. The text description of the error can be found at https://tools.ietf.org/html/rfc1350\n", err_code);
         break;
     case ERRTYPE_SOCK:
-        printf("[ERROR] Sock error. Error code: %d.\nThe text description of the error can be found at https://docs.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2\n", err_code);
+        printf("[ERROR] Sock error. Error code: %d. The text description of the error can be found at https://docs.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2\n", err_code);
         break;
     case ERRTYPE_NETASCII:
         printf("[ERROR] Netascii error: ");
@@ -201,7 +202,7 @@ int SetupSession(u_short request, u_short respond0, u_short respond1) {
         if (ret == SOCKET_ERROR) {
             if (WSAGetLastError() == WSAETIMEDOUT) {
                 timeout_retrans_cnt++;
-                retrans_cnt_sum++;
+                to_retrans_cnt++;
                 if (timeout_retrans_cnt == max_timeout_retrans_cnt) SET_ERROR_AND_RETURN(ERRTYPE_CLIENT, ERRCODE_TIMEOUT0);
                 fprintf(logfile, "[WARN] Time-out, retransmission times: %d.\n", timeout_retrans_cnt);
                 continue;
@@ -241,7 +242,7 @@ int RoundTrip(u_short respond) {
         if (ret == SOCKET_ERROR) {
             if (WSAGetLastError() == WSAETIMEDOUT) {
                 timeout_retrans_cnt++;
-                retrans_cnt_sum++;
+                to_retrans_cnt++;
                 if (timeout_retrans_cnt == max_timeout_retrans_cnt) SET_ERROR_AND_RETURN(ERRTYPE_CLIENT, ERRCODE_TIMEOUT);
                 fprintf(logfile, "[WARN] Time out, retransmission times: %d.\n", timeout_retrans_cnt);
                 continue;
@@ -275,7 +276,7 @@ int Get() {
         u_short datan = ntohs(*(u_short*)(recvbuf + 2));
         if (datan != ackn + 1) {
             fprintf(logfile, "[WARN] Out of order.\n");
-            retrans_cnt_sum++;
+            ooo_retrans_cnt++;
             continue;
         }
         // write and update num
@@ -286,11 +287,15 @@ int Get() {
     // send ack
     Send();
     long time = clock() - clk_sta;
-    printf("Read succeed, total size: %ld, time: %ld ms, speed: %.0lf bps.\n\n",
-            ftell(local_fp), time, CalcSpeed(ftell(local_fp), time)); 
-    printf("Max data num: %hd, Retrans count: %d.\n", ackn, retrans_cnt_sum);
-    printf("Send bytes: %-10lld  speed: %-9.0lf bps.\n", send_bytes, CalcSpeed(send_bytes, time));
-    printf("Recv bytes: %-10lld  speed: %-9.0lf bps.\n", recv_bytes, CalcSpeed(recv_bytes, time));
+    printf( "Read succeed, total size: %ld, time: %ld ms, speed: %.0lf bps.\nSummary:\n"
+            "\tMax data num: %hd\n"
+            "\tRetrans count: %d\n\t\t- Timeout retrans     : %d\n\t\t- Out of order retrans: %d\n"
+            "\tSend bytes: %-10lld  speed: %-9.0lf bps\n"
+            "\tRecv bytes: %-10lld  speed: %-9.0lf bps\n"
+            , ftell(local_fp), time, CalcSpeed(ftell(local_fp), time)
+            , ackn, to_retrans_cnt + ooo_retrans_cnt, to_retrans_cnt, ooo_retrans_cnt
+            , send_bytes, CalcSpeed(send_bytes, time)
+            , recv_bytes, CalcSpeed(recv_bytes, time));
     fprintf(logfile, "[INFO] File downloaded successfully, size: %ld.\n", ftell(local_fp));
     return 0;
 }
@@ -309,7 +314,7 @@ int Put() {
         u_short ackn = ntohs(*(u_short*)(recvbuf + 2));
         if (ackn != datan)  {
             fprintf(logfile, "[WARN] Out of order.\n");
-            retrans_cnt_sum++;
+            ooo_retrans_cnt++;
             continue;
         }
         // read and update num
@@ -319,11 +324,15 @@ int Put() {
         if (sendbuf_len == 4) break;  // recv last ack
     }
     long time = clock() - clk_sta;
-    printf("Write succeed, total size: %ld, time: %ld ms, speed: %.0lf bps.\n\n",
-            ftell(local_fp), time, CalcSpeed(ftell(local_fp), time)); 
-    printf("Max data num: %hd, Retrans count: %d.\n", datan - 1, retrans_cnt_sum);
-    printf("Send bytes: %-10lld  speed: %-9.0lf bps.\n", send_bytes, CalcSpeed(send_bytes, time));
-    printf("Recv bytes: %-10lld  speed: %-9.0lf bps.\n", recv_bytes, CalcSpeed(recv_bytes, time));
+    printf( "Write succeed, total size: %ld, time: %ld ms, speed: %.0lf bps.\nSummary:\n"
+            "\tMax data num: %hd\n"
+            "\tRetrans count: %d\n\t\t- Timeout retrans     : %d\n\t\t- Out of order retrans: %d\n"
+            "\tSend bytes: %-10lld  speed: %-9.0lf bps\n"
+            "\tRecv bytes: %-10lld  speed: %-9.0lf bps\n"
+            , ftell(local_fp), time, CalcSpeed(ftell(local_fp), time)
+            , datan - 1, to_retrans_cnt + ooo_retrans_cnt, to_retrans_cnt, ooo_retrans_cnt
+            , send_bytes, CalcSpeed(send_bytes, time)
+            , recv_bytes, CalcSpeed(recv_bytes, time));
     fprintf(logfile, "[INFO] File uploaded successfully, size: %d.\n", ftell(local_fp));
     return 0;
 }
