@@ -31,7 +31,7 @@ make
 
 命令行格式如下：
 
-```cmd
+```
 Usage: tftp [option] server_ip source [target]
 Options:
   -w    Upload binary file.
