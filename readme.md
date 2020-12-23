@@ -17,7 +17,8 @@ C语言实现的TFTP Windows客户端。
 实现了[RFC1350](https://www.ietf.org/rfc/rfc1350.txt)描述的TFTP客户端：
 
 - 提供对octet格式和netascii格式（[RFC854](https://www.ietf.org/rfc/rfc854.txt)）的读写支持（netascii.c）
-- 超时重传机制（具体可见client.c的Timeout-Retransmission）
+- 动态的超时设置（模仿TCP协议，具体见client.c的Recv() 函数）
+- 超时重传机制（具体见client.c的Timeout-Retransmission注释）
 - 实时发送/接收速度显示
 
 ## 使用方式
@@ -90,15 +91,15 @@ The target is the same as source if it is not assigned.
 | write   | netascii | bin         | tftp -wn %server_ip% sample_bin | 客户端报错：文件格式无法转换为netascii。           |
 | read    | netascii | bin         | tftp -rn %server_ip% sample_bin | 接收并检查是否为netascii格式。<br>不是则警告用户。 |
 
-设置高丢包率的环境，测试客户端。
+在极度恶劣的网络环境下测试客户端。
 
-首先在服务器上（Linux环境）将 wlp3s0 网卡设置30%的丢包率。
+首先在服务器上（Linux环境）将 wlp3s0 网卡设置30%的丢包率，时延为100±30ms。
 
 ```bash
-tc qdisc add dev wlp3s0 root netem loss 30%
+tc qdisc add dev wlp3s0 root netem loss 30% delay 100ms 30ms
 ```
 
-在客户端上进行写操作，其结果如下。
+客户端上的测试指令及详细输出如下。
 
 ```
 >tftp -w %server_ip% client.c
@@ -108,17 +109,19 @@ Source: client.c
 Target: client.c
 Transmode: octet
 
-Write successed, total size: 13659, time: 18158 ms.
-Max data num: 27, Retrans count: 18.
-Sent bytes: 21575, speed: 1188.1815 bps.
-Recv bytes: 112, speed: 6.1681 bps.
+Write succeed, total size: 15948, time: 62464 ms, speed: 255 bps.
+Summary:
+        Max data num: 32
+        Retrans count: 27
+                - Timeout retrans     : 7
+                - Out of order retrans: 20
+        Send bytes: 28528       speed: 457       bps
+        Recv bytes: 212         speed: 3         bps
 ```
-
-其中“Max data num: 28”表示总共有28个数据包，"Retrans count: 9"表示因失序或超时导致重传了9次。
 
 撤销服务器的更改。
 
 ```bash
-tc qdisc del dev wlp3s0 root netem loss 30%
+tc qdisc del dev wlp3s0 root netem loss 30% delay 100ms 30ms
 ```
 
