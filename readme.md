@@ -32,7 +32,7 @@ make
 命令行格式如下：
 
 ```
-Usage: tftp [option] server_ip source [target]
+Usage: tftp <-w|-r|-wn|-rn> server_ip source [target]
 Options:
   -w    Upload binary file.
   -r    Download binary file.
