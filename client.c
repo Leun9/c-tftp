@@ -178,7 +178,8 @@ int Recv() {
 
         recv_bytes += recvbuf_len;
         rt_recv_bytes += recvbuf_len;
-        fprintf(logfile, "[INFO] Received data, head: 0x%08lx, size: %d.\n", ntohl(*(long*)recvbuf), recvbuf_len);
+        fprintf(logfile, "[INFO] Received data, head: 0x%08lx, size: %d.\n",
+                ntohl(*(long*)recvbuf), recvbuf_len);
     }
     PrtSpeed();     /* 刷新实时速度显示 */
     return recvbuf_len;
