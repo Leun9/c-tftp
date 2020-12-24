@@ -159,24 +159,20 @@ int Recv() {
     recvbuf_len = recvfrom(client_sockfd, recvbuf, RECVBUFMAXLEN, 0, recv_addr_ptr, &recv_addr_len);
 
     if (recvbuf_len > 0) {
-        /* 计算平滑接收时间与接收时间偏差， 计算方法与TCP的srtt和mdev相同 */
-        // update smooth_recv_time and recv_time_out
-        //     imitate the update rules of RTO(Retransmission Timeout) in TCP protocol (linux/net/rxrpc/rtt.c)
+        /* 计算平滑接收时间与接收时间偏差， 计算方法与TCP的srtt和mdev相同(linux/net/rxrpc/rtt.c)*/
         int m = clock() - sta;
         m -= (smooth_recv_time >> 3);
         smooth_recv_time += m;      /* srt = 7/8 srt + 1/8 new */
         if (m < 0) {
             m = -m;
             m -= (recv_time_dev >> 2);
-            /* 1. 防止sto降，rto反而升高； 2. 防止rto降低得太快 */
-            if (m > 0) m >>= 3;     /* prevents growth of rto, limits too fast rto decreases */
+            if (m > 0) m >>= 3;     /* 1. 防止sto降，rto反而升高； 2. 防止rto降低得太快 */
         } else {
             m -= (recv_time_dev >> 2);
         }
         recv_time_dev += m;         /* dev = 3/4 dev + 1/4 new */
 
         /* 更新接收等待的时间：rto = srt + 4*dev */
-        // update the timeout for blocking receive calls
         recv_time_out = (smooth_recv_time >> 3) + recv_time_dev;
         setsockopt(client_sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&recv_time_out, sizeof(int));
 
