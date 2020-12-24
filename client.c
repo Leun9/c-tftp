@@ -34,12 +34,12 @@ int sendbuf_len;
 
 long recv_bytes = 0;        /* 接收的总字节数 */
 long send_bytes = 0;        /* 发送的总字节数 */
-int recv_time_out = RECVTIMEOUT_DEFAULT;    /* recvfrom的超时设置，在运行过程中动态变化 */
-int send_time_out = SENDTIMEOUT_DEFAULT;    /* sendto的超时设置，在运行过程中不发生变化 */
-int max_timeout_retrans_cnt = RETRANSCNT_DEFAULT;   /* 最大重传次数，在运行过程中动态变化 */
+int recv_time_out = RECVTIMEOUT_DEFAULT;    /* recvfrom的超时设置，动态变化 */
+int send_time_out = SENDTIMEOUT_DEFAULT;    /* sendto的超时设置，不发生变化 */
+int max_timeout_retrans_cnt = RETRANSCNT_DEFAULT;   /* 最大重传次数，动态变化 */
 int to_retrans_cnt = 0;                 /* 超时（timeout）重传的次数 */
 int ooo_retrans_cnt = 0;                /* 因失序(out of order)导致重传的次数 */
-int unexpected_retrans_cnt = 0;         /* 因接收到意料之外的数据包导致重传的次数 */
+int unexpected_retrans_cnt = 0;     /* 因接收到意料之外的数据包导致重传的次数 */
 
 /* 平滑接收时间，实际存储估计值的8倍，与TCP中的srtt相似 */
 int smooth_recv_time = RECVTIMEOUT_DEFAULT << 3;
