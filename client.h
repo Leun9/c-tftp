@@ -1,15 +1,19 @@
 /* client args */
         
-#define RECVBUFMAXLEN           516
-#define SENDBUFMAXLEN           516
+#define BLOCKSIZE               512         // 发送的块大小
+#define RECVBUFMAXLEN           516         // 接收缓冲区的长度
+#define SENDBUFMAXLEN           516         // 发送缓冲区的长度（至少等于BLOCKSIZE + 4）
 
-#define RECVTIMEOUT_DEFAULT     1000
-#define SENDTIMEOUT_DEFAULT     1000
-#define RETRANSCNT_DEFAULT      5
+#define RECVTIMEOUT_DEFAULT     500         // 默认的RTO
+#define RECVTIME_DEV_UBOUND     128         // 4倍RTO偏差的下届
+#define SENDTIMEOUT_DEFAULT     1000        // 发送数据的timeout
+
+#define FIRST_MAX_RETRANSCNT    10          // 第一次发送数据的重传次数
+#define RETRANSCNT_DEFAULT      20          // 后续数据往返时的重传次数初始值
 
 #define SPEED_REFRESH_FRE       1000
 
-#define LOGFILE                 "tftp.log"
+#define LOGFILE                 "tftp.log"  // 日志文件名
 
 /* client error args */
 
