@@ -1,6 +1,6 @@
 # TFTP
 
-C语言实现的TFTP Windows客户端。
+C语言实现的TFTP Windows客户端，计算机网络实验作业。
 
 ## 目录
 
@@ -16,7 +16,7 @@ C语言实现的TFTP Windows客户端。
 
 实现了[RFC1350](https://www.ietf.org/rfc/rfc1350.txt)描述的TFTP客户端：
 
-- 提供对octet格式和netascii格式（[RFC5198](https://www.ietf.org/rfc/rfc5198.txt)）的读写支持（netascii.c）
+- 提供对octet格式和netascii格式（[RFC854](https://www.ietf.org/rfc/rfc854.txt) [RFC5198](https://www.ietf.org/rfc/rfc5198.txt)）的读写支持（netascii.c）
 - 动态的超时设置（模仿TCP协议，具体见client.c的Recv() 函数）
 - 超时重传机制（具体见client.c的Timeout-Retransmission注释）
 - 实时发送/接收速度显示
@@ -62,7 +62,7 @@ The target is the same as source if it is not assigned.
 
 #### netascii
 
-- 参考[RFC5198](https://www.ietf.org/rfc/rfc5198.txt)，netascii格式要求如下：
+- 参考[RFC854](https://www.ietf.org/rfc/rfc854.txt) 和[RFC5198](https://www.ietf.org/rfc/rfc5198.txt)，netascii格式要求如下：
   - 合法的字符包括：
     - ASCII码在0x20到0x7e之间的可打印字符
     - ASCII码在0x07到0x0d之的七个控制字符
@@ -109,14 +109,14 @@ Source: client.c
 Target: client.c
 Transmode: octet
 
-Write succeed, total size: 15948, time: 62464 ms, speed: 255 bps.
+Write succeed, total size: 15948, time: 62464 ms, speed: 255 Bps.
 Summary:
         Max data num: 32
         Retrans count: 27
                 - Timeout retrans     : 7
                 - Out of order retrans: 20
-        Send bytes: 28528       speed: 457       bps
-        Recv bytes: 212         speed: 3         bps
+        Send bytes: 28528       speed: 457       Bps
+        Recv bytes: 212         speed: 3         Bps
 ```
 
 撤销服务器的更改。
