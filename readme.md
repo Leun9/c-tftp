@@ -16,7 +16,7 @@ C语言实现的TFTP Windows客户端。
 
 实现了[RFC1350](https://www.ietf.org/rfc/rfc1350.txt)描述的TFTP客户端：
 
-- 提供对octet格式和netascii格式（[RFC854](https://www.ietf.org/rfc/rfc854.txt)）的读写支持（netascii.c）
+- 提供对octet格式和netascii格式（[RFC5198](https://www.ietf.org/rfc/rfc5198.txt)）的读写支持（netascii.c）
 - 动态的超时设置（模仿TCP协议，具体见client.c的Recv() 函数）
 - 超时重传机制（具体见client.c的Timeout-Retransmission注释）
 - 实时发送/接收速度显示
@@ -62,7 +62,7 @@ The target is the same as source if it is not assigned.
 
 #### netascii
 
-- 参考[RFC854](https://www.ietf.org/rfc/rfc854.txt)，netascii格式要求如下：
+- 参考[RFC5198](https://www.ietf.org/rfc/rfc5198.txt)，netascii格式要求如下：
   - 合法的字符包括：
     - ASCII码在0x20到0x7e之间的可打印字符
     - ASCII码在0x07到0x0d之的七个控制字符
